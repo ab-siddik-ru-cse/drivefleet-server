@@ -92,7 +92,37 @@ async function run() {
             }
         });
 
+        //Get a single car
+        app.get("/cars/:id", async (req, res) => {
+            try {
+                const id = req.params.id;
 
+                const car = await carsCollection.findOne({
+                    _id: new ObjectId(id),
+                });
+
+                if (!car) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Car not found",
+                    });
+                }
+
+                res.status(200).json({
+                    success: true,
+                    car,
+                });
+            } catch (error) {
+                console.error("GET SINGLE CAR error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to fetch car",
+                });
+            }
+        });
+
+        // Test the connection
         await client.db("admin").command({ ping: 1 });
     } finally {
         // await client.close();
