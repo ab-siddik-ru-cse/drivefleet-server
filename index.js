@@ -298,6 +298,45 @@ async function run() {
             }
         });
 
+        // Bookings collection
+        const bookingsCollection = database.collection("bookings");
+
+        // Get bookings for a user
+        app.get("/bookings", async (req, res) => {
+            try {
+
+                // userId query diye user er bookings fetch
+                const userId = req.query.userId;
+
+                if (!userId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "User ID is required",
+                    });
+                }
+
+                const bookings = await bookingsCollection
+                    .find({ userId })
+                    .sort({ bookingDate: -1 })
+                    .toArray();
+
+                res.status(200).json({
+                    success: true,
+                    count: bookings.length,
+                    bookings,
+                });
+
+            } catch (error) {
+                console.error("GET /bookings error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not load bookings",
+                });
+            }
+        });
+
+
         // Test the connection
         await client.db("admin").command({ ping: 1 });
 
