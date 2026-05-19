@@ -525,6 +525,94 @@ async function run() {
             }
         });
 
+        //cancel a booking
+        app.delete("/bookings/:id", async (req, res) => {
+            try {
+
+                const id = req.params.id;
+                const userId = req.query.userId;
+
+                let _id;
+
+                try {
+                    _id = new ObjectId(id);
+                } catch {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid booking ID",
+                    });
+                }
+
+                // Find booking
+                const booking = await bookingsCollection.findOne({
+                    _id,
+                });
+
+                if (!booking) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Booking not found",
+                    });
+                }
+
+                // User validation
+                if (booking.userId !== userId) {
+                    return res.status(403).json({
+                        success: false,
+                        message: "You can only cancel your own booking",
+                    });
+                }
+
+                // Already cancelled
+                if (booking.status === "cancelled") {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Booking already cancelled",
+                    });
+                }
+
+                // Update booking status
+                await bookingsCollection.updateOne(
+                    {
+                        _id,
+                    },
+                    {
+                        $set: {
+                            status: "cancelled",
+                            cancelledAt: new Date(),
+                        },
+                    }
+                );
+
+                // Decrement booking count
+                if (booking.carId) {
+                    await carsCollection.updateOne(
+                        {
+                            _id: booking.carId,
+                        },
+                        {
+                            $inc: {
+                                bookingCount: -1,
+                            },
+                        }
+                    );
+                }
+
+                res.status(200).json({
+                    success: true,
+                    message: "Booking cancelled successfully",
+                });
+
+            } catch (error) {
+                console.error("DELETE /bookings/:id error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not cancel booking",
+                });
+            }
+        });
+
 
         // Test the connection
         await client.db("admin").command({ ping: 1 });
