@@ -50,6 +50,12 @@ async function run() {
                         $options: "i",
                     };
                 }
+                // Filter by type
+                if (types.length > 0) {
+                    filter.type = {
+                        $in: types,
+                    };
+                }
 
                 res.status(200).json({
                     success: true,
