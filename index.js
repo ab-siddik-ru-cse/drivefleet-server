@@ -122,6 +122,109 @@ async function run() {
             }
         });
 
+        //Add a new car
+        app.post("/add-car", async (req, res) => {
+            try {
+                const body = req.body;
+
+                const {
+                    name,
+                    dailyPrice,
+                    type,
+                    imageURL,
+                    seatCapacity,
+                    pickupLocation,
+                    description,
+                    available,
+                    ownerId,
+                    ownerEmail,
+                    ownerName,
+                } = body;
+
+                // Validation
+                const missing = [];
+
+                if (!name?.trim()) missing.push("name");
+                if (dailyPrice === undefined || dailyPrice === "")
+                    missing.push("dailyPrice");
+                if (!type?.trim()) missing.push("type");
+                if (!imageURL?.trim()) missing.push("imageURL");
+                if (seatCapacity === undefined || seatCapacity === "")
+                    missing.push("seatCapacity");
+                if (!pickupLocation?.trim()) missing.push("pickupLocation");
+                if (!description?.trim()) missing.push("description");
+
+                if (missing.length > 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Missing required fields: ${missing.join(", ")}`,
+                    });
+                }
+
+                // Number validation
+                const priceNum = Number(dailyPrice);
+                const seatsNum = Number(seatCapacity);
+
+                if (!Number.isFinite(priceNum) || priceNum <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Daily price must be positive number",
+                    });
+                }
+
+                if (
+                    !Number.isFinite(seatsNum) ||
+                    seatsNum < 1 ||
+                    seatsNum > 50
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Seat capacity must be between 1 and 50",
+                    });
+                }
+
+                // Final document
+                const doc = {
+                    name: name.trim(),
+                    dailyPrice: priceNum,
+                    type: type.trim(),
+                    imageURL: imageURL.trim(),
+                    seatCapacity: seatsNum,
+                    pickupLocation: pickupLocation.trim(),
+                    description: description.trim(),
+                    available: available !== false,
+                    bookingCount: 0,
+
+                    // owner info
+                    ownerId: ownerId || "",
+                    ownerEmail: ownerEmail || "",
+                    ownerName: ownerName || "",
+
+                    createdAt: new Date(),
+                };
+
+                const result = await carsCollection.insertOne(doc);
+
+                res.status(201).json({
+                    success: true,
+                    message: "Car added successfully",
+                    insertedId: result.insertedId,
+                    car: {
+                        ...doc,
+                        _id: result.insertedId,
+                    },
+                });
+            } catch (error) {
+                console.error("POST /add-car error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not create car",
+                });
+            }
+        });
+
+
         // Test the connection
         await client.db("admin").command({ ping: 1 });
     } finally {
