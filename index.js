@@ -224,6 +224,36 @@ async function run() {
             }
         });
 
+        // Update a car
+        app.put("/cars/:id", async (req, res) => {
+            try {
+                const id = req.params.id;
+                const updatedData = req.body;
+
+                const result = await carsCollection.updateOne(
+                    {
+                        _id: new ObjectId(id),
+                    },
+                    {
+                        $set: updatedData,
+                    }
+                );
+
+                res.status(200).json({
+                    success: true,
+                    message: "Car updated successfully",
+                    result,
+                });
+            } catch (error) {
+                console.error("UPDATE CAR error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to update car",
+                });
+            }
+        });
+
 
         // Test the connection
         await client.db("admin").command({ ping: 1 });
