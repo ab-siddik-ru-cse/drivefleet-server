@@ -39,6 +39,23 @@ async function run() {
                 const limitParam = parseInt(req.query.limit || "0");
                 const ownerId = req.query.ownerId;
                 const sort = req.query.sort || "newest";
+                const cars = await cursor.toArray();
+
+                const filter = {};
+
+                // Search by name
+                if (q) {
+                    filter.name = {
+                        $regex: q,
+                        $options: "i",
+                    };
+                }
+
+                res.status(200).json({
+                    success: true,
+                    count: cars.length,
+                    cars,
+                });
             } catch (error) {
                 console.error("GET /cars error:", error);
 
