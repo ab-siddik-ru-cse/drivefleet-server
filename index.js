@@ -61,6 +61,22 @@ async function run() {
                     filter.ownerId = ownerId;
                 }
 
+                // Sorting
+                const sortMap = {
+                    newest: { createdAt: -1 },
+                    "price-asc": { dailyPrice: 1 },
+                    "price-desc": { dailyPrice: -1 },
+                    popular: { bookingCount: -1 },
+                };
+
+                const sortStage = sortMap[sort] || sortMap.newest;
+
+                let cursor = carsCollection.find(filter).sort(sortStage);
+
+                if (limitParam > 0) {
+                    cursor = cursor.limit(limitParam);
+                }
+
                 res.status(200).json({
                     success: true,
                     count: cars.length,
