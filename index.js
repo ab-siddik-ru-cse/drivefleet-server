@@ -56,6 +56,10 @@ async function run() {
                         $in: types,
                     };
                 }
+                // Filter by owner
+                if (ownerId) {
+                    filter.ownerId = ownerId;
+                }
 
                 res.status(200).json({
                     success: true,
