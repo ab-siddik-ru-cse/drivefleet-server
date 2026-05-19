@@ -24,32 +24,33 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         await client.connect();
-
         const database = client.db('drivefleet');
         const carsCollection = database.collection('cars');
+        console.log("Connected to MongoDB!");
+        app.get("/cars", async (req, res) => {
+            try {
+                const q = req.query.q?.trim();
+                const types = req.query.type
+                    ? Array.isArray(req.query.type)
+                        ? req.query.type
+                        : [req.query.type]
+                    : [];
 
-        app.get('/cars', async (req, res) => {
-            const cursor = await carsCollection.find().toArray();
-            res.json(cursor);
+                const limitParam = parseInt(req.query.limit || "0");
+                const ownerId = req.query.ownerId;
+                const sort = req.query.sort || "newest";
+            } catch (error) {
+                console.error("GET /cars error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not load cars",
+                });
+            }
         });
 
-        app.post('/admin', async (req, res) => {
-            const carsData = req.body;
-
-            console.log(carsData);
-
-            const result = await carsCollection.insertOne(carsData);
-
-            res.status(200).json({
-                success: true,
-                message: 'Car added successfully',
-                result,
-            });
-        });
 
         await client.db("admin").command({ ping: 1 });
-
-        console.log("Connected to MongoDB!");
     } finally {
         // await client.close();
     }
@@ -57,8 +58,9 @@ async function run() {
 
 run().catch(console.dir);
 
-app.get('/', (req, res) => {
-    res.send('Hello World!');
+// Root route
+app.get("/", (req, res) => {
+    res.send("DriveFleet Server Running...");
 });
 
 app.listen(port, () => {
