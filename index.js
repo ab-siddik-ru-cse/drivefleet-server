@@ -336,6 +336,195 @@ async function run() {
             }
         });
 
+        // Create a new booking
+        app.post("/bookings", async (req, res) => {
+            try {
+
+                const body = req.body;
+
+                const {
+                    carId,
+                    startDate,
+                    endDate,
+                    driverNeeded,
+                    specialNote,
+                    userId,
+                    userEmail,
+                    userName,
+                } = body;
+
+                // Validation
+                if (!carId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Car ID is required",
+                    });
+                }
+
+                if (!startDate || !endDate) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Both start and end dates are required",
+                    });
+                }
+
+                // Convert ObjectId
+                let _carId;
+
+                try {
+                    _carId = new ObjectId(carId);
+                } catch {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid car ID",
+                    });
+                }
+
+                // Date validation
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid dates",
+                    });
+                }
+
+                if (start < today) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Start date cannot be in the past",
+                    });
+                }
+
+                if (end < start) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "End date must be after start date",
+                    });
+                }
+
+                // Days calculation
+                const days = Math.max(
+                    1,
+                    Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1
+                );
+
+                // Find car
+                const car = await carsCollection.findOne({
+                    _id: _carId,
+                });
+
+                if (!car) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Car not found",
+                    });
+                }
+
+                // Availability check
+                if (!car.available) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "This car is currently unavailable",
+                    });
+                }
+
+                // Own car booking check
+                if (car.ownerId === userId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "You cannot book your own car",
+                    });
+                }
+
+                // Price calculation
+                const DRIVER_DAILY_FEE = 50;
+
+                const dailyPrice = Number(car.dailyPrice);
+
+                const driverTotal = driverNeeded
+                    ? DRIVER_DAILY_FEE * days
+                    : 0;
+
+                const totalPrice = dailyPrice * days + driverTotal;
+
+                // Final booking document
+                const bookingDoc = {
+                    carId: _carId,
+                    carName: car.name,
+                    carImage: car.imageURL,
+                    carType: car.type,
+                    pickupLocation: car.pickupLocation,
+
+                    ownerId: car.ownerId,
+                    ownerEmail: car.ownerEmail,
+
+                    userId,
+                    userEmail,
+                    userName: userName || "",
+
+                    startDate: start,
+                    endDate: end,
+
+                    bookingDate: new Date(),
+
+                    days,
+
+                    driverNeeded: Boolean(driverNeeded),
+
+                    specialNote: (specialNote || "")
+                        .toString()
+                        .trim()
+                        .slice(0, 500),
+
+                    dailyPrice,
+                    totalPrice,
+
+                    status: "confirmed",
+                };
+
+                // Insert booking
+                const result = await bookingsCollection.insertOne(bookingDoc);
+
+                // Increment booking count
+                await carsCollection.updateOne(
+                    {
+                        _id: _carId,
+                    },
+                    {
+                        $inc: {
+                            bookingCount: 1,
+                        },
+                    }
+                );
+
+                res.status(201).json({
+                    success: true,
+                    message: "Booking created successfully",
+
+                    insertedId: result.insertedId,
+
+                    booking: {
+                        ...bookingDoc,
+                        _id: result.insertedId,
+                    },
+                });
+
+            } catch (error) {
+                console.error("POST /bookings error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not create booking",
+                });
+            }
+        });
+
 
         // Test the connection
         await client.db("admin").command({ ping: 1 });
