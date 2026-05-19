@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -26,10 +26,13 @@ async function run() {
         await client.connect();
         const database = client.db('drivefleet');
         const carsCollection = database.collection('cars');
+
         console.log("Connected to MongoDB!");
+
         app.get("/cars", async (req, res) => {
             try {
                 const q = req.query.q?.trim();
+
                 const types = req.query.type
                     ? Array.isArray(req.query.type)
                         ? req.query.type
@@ -37,9 +40,9 @@ async function run() {
                     : [];
 
                 const limitParam = parseInt(req.query.limit || "0");
+
                 const ownerId = req.query.ownerId;
                 const sort = req.query.sort || "newest";
-                const cars = await cursor.toArray();
 
                 const filter = {};
 
@@ -50,12 +53,14 @@ async function run() {
                         $options: "i",
                     };
                 }
+
                 // Filter by type
                 if (types.length > 0) {
                     filter.type = {
                         $in: types,
                     };
                 }
+
                 // Filter by owner
                 if (ownerId) {
                     filter.ownerId = ownerId;
@@ -77,11 +82,16 @@ async function run() {
                     cursor = cursor.limit(limitParam);
                 }
 
+                // ISSUE FIX:
+                // cars variable cursor create howar pore call korte hobe
+                const cars = await cursor.toArray();
+
                 res.status(200).json({
                     success: true,
                     count: cars.length,
                     cars,
                 });
+
             } catch (error) {
                 console.error("GET /cars error:", error);
 
@@ -112,6 +122,7 @@ async function run() {
                     success: true,
                     car,
                 });
+
             } catch (error) {
                 console.error("GET SINGLE CAR error:", error);
 
@@ -145,13 +156,19 @@ async function run() {
                 const missing = [];
 
                 if (!name?.trim()) missing.push("name");
+
                 if (dailyPrice === undefined || dailyPrice === "")
                     missing.push("dailyPrice");
+
                 if (!type?.trim()) missing.push("type");
+
                 if (!imageURL?.trim()) missing.push("imageURL");
+
                 if (seatCapacity === undefined || seatCapacity === "")
                     missing.push("seatCapacity");
+
                 if (!pickupLocation?.trim()) missing.push("pickupLocation");
+
                 if (!description?.trim()) missing.push("description");
 
                 if (missing.length > 0) {
@@ -214,6 +231,7 @@ async function run() {
                         _id: result.insertedId,
                     },
                 });
+
             } catch (error) {
                 console.error("POST /add-car error:", error);
 
@@ -244,6 +262,7 @@ async function run() {
                     message: "Car updated successfully",
                     result,
                 });
+
             } catch (error) {
                 console.error("UPDATE CAR error:", error);
 
@@ -253,7 +272,7 @@ async function run() {
                 });
             }
         });
-        
+
         // Delete a car
         app.delete("/cars/:id", async (req, res) => {
             try {
@@ -268,6 +287,7 @@ async function run() {
                     message: "Car deleted successfully",
                     result,
                 });
+
             } catch (error) {
                 console.error("DELETE CAR error:", error);
 
@@ -278,9 +298,9 @@ async function run() {
             }
         });
 
-
         // Test the connection
         await client.db("admin").command({ ping: 1 });
+
     } finally {
         // await client.close();
     }
