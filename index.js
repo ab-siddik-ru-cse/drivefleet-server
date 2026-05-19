@@ -253,6 +253,30 @@ async function run() {
                 });
             }
         });
+        
+        // Delete a car
+        app.delete("/cars/:id", async (req, res) => {
+            try {
+                const id = req.params.id;
+
+                const result = await carsCollection.deleteOne({
+                    _id: new ObjectId(id),
+                });
+
+                res.status(200).json({
+                    success: true,
+                    message: "Car deleted successfully",
+                    result,
+                });
+            } catch (error) {
+                console.error("DELETE CAR error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to delete car",
+                });
+            }
+        });
 
 
         // Test the connection
