@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 require('dotenv').config();
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -609,6 +611,91 @@ async function run() {
                 res.status(500).json({
                     success: false,
                     message: "Could not cancel booking",
+                });
+            }
+        });
+
+        //login a user
+        app.post("/login", async (req, res) => {
+            try {
+
+                const { email, password } = req.body;
+
+                // Validation
+                if (!email || !password) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Email and password are required",
+                    });
+                }
+
+                // Find user
+                const user = await usersCollection.findOne({
+                    email: email.toLowerCase(),
+                });
+
+                // User check
+                if (!user || !user.passwordHash) {
+                    return res.status(401).json({
+                        success: false,
+                        message: "Invalid email or password",
+                    });
+                }
+
+                // Password compare
+                const isPasswordValid = await bcrypt.compare(
+                    password,
+                    user.passwordHash
+                );
+
+                if (!isPasswordValid) {
+                    return res.status(401).json({
+                        success: false,
+                        message: "Invalid email or password",
+                    });
+                }
+
+                // JWT token create
+                const token = jwt.sign(
+                    {
+                        uid: user._id.toString(),
+                        email: user.email,
+                        name: user.name,
+                    },
+                    process.env.JWT_SECRET,
+                    {
+                        expiresIn: "7d",
+                    }
+                );
+
+                // Cookie set
+                res.cookie("token", token, {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: "strict",
+                    maxAge: 7 * 24 * 60 * 60 * 1000,
+                });
+
+                // Response
+                res.status(200).json({
+                    success: true,
+                    message: "Login successful",
+
+                    token,
+
+                    user: {
+                        uid: user._id.toString(),
+                        email: user.email,
+                        name: user.name,
+                    },
+                });
+
+            } catch (error) {
+                console.error("POST /auth/login error:", error);
+
+                res.status(500).json({
+                    success: false,
+                    message: "Could not log in",
                 });
             }
         });
