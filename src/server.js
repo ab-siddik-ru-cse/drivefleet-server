@@ -10,6 +10,7 @@ const { buildAuth } = require("./config/auth");
 const authRoutes = require("./routes/auth");
 const carsRoutes = require("./routes/cars");
 const bookingsRoutes = require("./routes/bookings");
+const usersRoutes = require("./routes/users");
 
 async function main() {
   await connect();
@@ -38,6 +39,7 @@ async function main() {
   app.use("/api/session", authRoutes(auth));
   app.use("/api/cars", carsRoutes);
   app.use("/api/bookings", bookingsRoutes);
+  app.use("/api/users", usersRoutes);
 
   app.get("/", (_req, res) => {
     res.json({ ok: true, service: "drivefleet-server", time: new Date().toISOString() });
