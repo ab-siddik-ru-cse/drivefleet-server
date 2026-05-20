@@ -1,38 +1,121 @@
-const express = require('express');
-const cors = require('cors');
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-require('dotenv').config();
+const express = require("express");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+require("dotenv").config();
 
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
+const { betterAuth } = require("better-auth");
+const { toNodeHandler } = require("better-auth/node");
+const { mongodbAdapter } = require("better-auth/adapters/mongodb");
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-// middleware
-app.use(cors());
-app.use(express.json());
+// MIDDLEWARE
 
-// MongoDB connection
+app.use(
+    cors({
+        origin: "http://localhost:3000",
+        credentials: true,
+    })
+);
+
+app.use(express.json());
+app.use(cookieParser());
+
+// MONGODB CONNECTION
+
 const uri = process.env.MONGODB_URI;
 
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
         deprecationErrors: true,
-    }
+    },
 });
+
+// RUN SERVER
 
 async function run() {
     try {
+
         await client.connect();
-        const database = client.db('drivefleet');
-        const carsCollection = database.collection('cars');
+
+        const database = client.db("drivefleet");
+
+        // Collections
+        const carsCollection = database.collection("cars");
+        const bookingsCollection = database.collection("bookings");
 
         console.log("Connected to MongoDB!");
 
+        // BETTER AUTH
+
+        const auth = betterAuth({
+
+            database: mongodbAdapter(db),
+
+            secret: process.env.BETTER_AUTH_SECRET,
+
+            baseURL: "http://localhost:5000",
+
+            trustedOrigins: [
+                "http://localhost:3000",
+            ],
+
+            emailAndPassword: {
+                enabled: true,
+            },
+
+            socialProviders: {
+                google: {
+                    clientId: process.env.GOOGLE_CLIENT_ID,
+                    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+                },
+            },
+
+        });
+
+        // Better Auth handler
+        app.all("/api/auth/{*any}", toNodeHandler(auth));
+
+        // AUTH MIDDLEWARE
+
+        async function verifyAuth(req, res, next) {
+            try {
+
+                const session = await auth.api.getSession({
+                    headers: req.headers,
+                });
+
+                if (!session) {
+                    return res.status(401).json({
+                        success: false,
+                        message: "Unauthorized access",
+                    });
+                }
+
+                req.user = session.user;
+
+                next();
+
+            } catch (error) {
+
+                console.error("AUTH MIDDLEWARE ERROR:", error);
+
+                res.status(401).json({
+                    success: false,
+                    message: "Unauthorized access",
+                });
+            }
+        }
+
+        // GET ALL CARS
+
         app.get("/cars", async (req, res) => {
             try {
+
                 const q = req.query.q?.trim();
 
                 const types = req.query.type
@@ -44,6 +127,7 @@ async function run() {
                 const limitParam = parseInt(req.query.limit || "0");
 
                 const ownerId = req.query.ownerId;
+
                 const sort = req.query.sort || "newest";
 
                 const filter = {};
@@ -84,8 +168,6 @@ async function run() {
                     cursor = cursor.limit(limitParam);
                 }
 
-                // ISSUE FIX:
-                // cars variable cursor create howar pore call korte hobe
                 const cars = await cursor.toArray();
 
                 res.status(200).json({
@@ -95,6 +177,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("GET /cars error:", error);
 
                 res.status(500).json({
@@ -104,9 +187,11 @@ async function run() {
             }
         });
 
-        //Get a single car
+        // GET SINGLE CAR
+
         app.get("/cars/:id", async (req, res) => {
             try {
+
                 const id = req.params.id;
 
                 const car = await carsCollection.findOne({
@@ -126,6 +211,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("GET SINGLE CAR error:", error);
 
                 res.status(500).json({
@@ -135,9 +221,11 @@ async function run() {
             }
         });
 
-        //Add a new car
-        app.post("/add-car", async (req, res) => {
+        // ADD NEW CAR
+
+        app.post("/add-car", verifyAuth, async (req, res) => {
             try {
+
                 const body = req.body;
 
                 const {
@@ -149,12 +237,8 @@ async function run() {
                     pickupLocation,
                     description,
                     available,
-                    ownerId,
-                    ownerEmail,
-                    ownerName,
                 } = body;
 
-                // Validation
                 const missing = [];
 
                 if (!name?.trim()) missing.push("name");
@@ -169,9 +253,11 @@ async function run() {
                 if (seatCapacity === undefined || seatCapacity === "")
                     missing.push("seatCapacity");
 
-                if (!pickupLocation?.trim()) missing.push("pickupLocation");
+                if (!pickupLocation?.trim())
+                    missing.push("pickupLocation");
 
-                if (!description?.trim()) missing.push("description");
+                if (!description?.trim())
+                    missing.push("description");
 
                 if (missing.length > 0) {
                     return res.status(400).json({
@@ -180,8 +266,8 @@ async function run() {
                     });
                 }
 
-                // Number validation
                 const priceNum = Number(dailyPrice);
+
                 const seatsNum = Number(seatCapacity);
 
                 if (!Number.isFinite(priceNum) || priceNum <= 0) {
@@ -211,13 +297,15 @@ async function run() {
                     seatCapacity: seatsNum,
                     pickupLocation: pickupLocation.trim(),
                     description: description.trim(),
+
                     available: available !== false,
+
                     bookingCount: 0,
 
-                    // owner info
-                    ownerId: ownerId || "",
-                    ownerEmail: ownerEmail || "",
-                    ownerName: ownerName || "",
+                    // Owner from session
+                    ownerId: req.user.id,
+                    ownerEmail: req.user.email,
+                    ownerName: req.user.name || "",
 
                     createdAt: new Date(),
                 };
@@ -227,7 +315,9 @@ async function run() {
                 res.status(201).json({
                     success: true,
                     message: "Car added successfully",
+
                     insertedId: result.insertedId,
+
                     car: {
                         ...doc,
                         _id: result.insertedId,
@@ -235,6 +325,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("POST /add-car error:", error);
 
                 res.status(500).json({
@@ -244,82 +335,18 @@ async function run() {
             }
         });
 
-        // Update a car
-        app.put("/cars/:id", async (req, res) => {
+        // GET BOOKINGS
+
+        app.get("/bookings", verifyAuth, async (req, res) => {
             try {
-                const id = req.params.id;
-                const updatedData = req.body;
-
-                const result = await carsCollection.updateOne(
-                    {
-                        _id: new ObjectId(id),
-                    },
-                    {
-                        $set: updatedData,
-                    }
-                );
-
-                res.status(200).json({
-                    success: true,
-                    message: "Car updated successfully",
-                    result,
-                });
-
-            } catch (error) {
-                console.error("UPDATE CAR error:", error);
-
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to update car",
-                });
-            }
-        });
-
-        // Delete a car
-        app.delete("/cars/:id", async (req, res) => {
-            try {
-                const id = req.params.id;
-
-                const result = await carsCollection.deleteOne({
-                    _id: new ObjectId(id),
-                });
-
-                res.status(200).json({
-                    success: true,
-                    message: "Car deleted successfully",
-                    result,
-                });
-
-            } catch (error) {
-                console.error("DELETE CAR error:", error);
-
-                res.status(500).json({
-                    success: false,
-                    message: "Failed to delete car",
-                });
-            }
-        });
-
-        // Bookings collection
-        const bookingsCollection = database.collection("bookings");
-
-        // Get bookings for a user
-        app.get("/bookings", async (req, res) => {
-            try {
-
-                // userId query diye user er bookings fetch
-                const userId = req.query.userId;
-
-                if (!userId) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "User ID is required",
-                    });
-                }
 
                 const bookings = await bookingsCollection
-                    .find({ userId })
-                    .sort({ bookingDate: -1 })
+                    .find({
+                        userId: req.user.id,
+                    })
+                    .sort({
+                        bookingDate: -1,
+                    })
                     .toArray();
 
                 res.status(200).json({
@@ -329,6 +356,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("GET /bookings error:", error);
 
                 res.status(500).json({
@@ -338,8 +366,9 @@ async function run() {
             }
         });
 
-        // Create a new booking
-        app.post("/bookings", async (req, res) => {
+        // CREATE BOOKING
+
+        app.post("/bookings", verifyAuth, async (req, res) => {
             try {
 
                 const body = req.body;
@@ -350,12 +379,8 @@ async function run() {
                     endDate,
                     driverNeeded,
                     specialNote,
-                    userId,
-                    userEmail,
-                    userName,
                 } = body;
 
-                // Validation
                 if (!carId) {
                     return res.status(400).json({
                         success: false,
@@ -363,14 +388,6 @@ async function run() {
                     });
                 }
 
-                if (!startDate || !endDate) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Both start and end dates are required",
-                    });
-                }
-
-                // Convert ObjectId
                 let _carId;
 
                 try {
@@ -382,41 +399,16 @@ async function run() {
                     });
                 }
 
-                // Date validation
                 const start = new Date(startDate);
                 const end = new Date(endDate);
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid dates",
-                    });
-                }
-
-                if (start < today) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Start date cannot be in the past",
-                    });
-                }
-
-                if (end < start) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "End date must be after start date",
-                    });
-                }
-
-                // Days calculation
                 const days = Math.max(
                     1,
-                    Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1
+                    Math.round(
+                        (end - start) / (1000 * 60 * 60 * 24)
+                    ) + 1
                 );
 
-                // Find car
                 const car = await carsCollection.findOne({
                     _id: _carId,
                 });
@@ -428,23 +420,6 @@ async function run() {
                     });
                 }
 
-                // Availability check
-                if (!car.available) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "This car is currently unavailable",
-                    });
-                }
-
-                // Own car booking check
-                if (car.ownerId === userId) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "You cannot book your own car",
-                    });
-                }
-
-                // Price calculation
                 const DRIVER_DAILY_FEE = 50;
 
                 const dailyPrice = Number(car.dailyPrice);
@@ -453,22 +428,20 @@ async function run() {
                     ? DRIVER_DAILY_FEE * days
                     : 0;
 
-                const totalPrice = dailyPrice * days + driverTotal;
+                const totalPrice =
+                    dailyPrice * days + driverTotal;
 
-                // Final booking document
                 const bookingDoc = {
                     carId: _carId,
+
                     carName: car.name,
                     carImage: car.imageURL,
-                    carType: car.type,
-                    pickupLocation: car.pickupLocation,
 
                     ownerId: car.ownerId,
-                    ownerEmail: car.ownerEmail,
 
-                    userId,
-                    userEmail,
-                    userName: userName || "",
+                    userId: req.user.id,
+                    userEmail: req.user.email,
+                    userName: req.user.name || "",
 
                     startDate: start,
                     endDate: end,
@@ -490,8 +463,9 @@ async function run() {
                     status: "confirmed",
                 };
 
-                // Insert booking
-                const result = await bookingsCollection.insertOne(bookingDoc);
+                const result = await bookingsCollection.insertOne(
+                    bookingDoc
+                );
 
                 // Increment booking count
                 await carsCollection.updateOne(
@@ -509,8 +483,6 @@ async function run() {
                     success: true,
                     message: "Booking created successfully",
 
-                    insertedId: result.insertedId,
-
                     booking: {
                         ...bookingDoc,
                         _id: result.insertedId,
@@ -518,6 +490,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("POST /bookings error:", error);
 
                 res.status(500).json({
@@ -527,27 +500,15 @@ async function run() {
             }
         });
 
-        //cancel a booking
-        app.delete("/bookings/:id", async (req, res) => {
+        // CANCEL BOOKING
+
+        app.delete("/bookings/:id", verifyAuth, async (req, res) => {
             try {
 
                 const id = req.params.id;
-                const userId = req.query.userId;
 
-                let _id;
-
-                try {
-                    _id = new ObjectId(id);
-                } catch {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid booking ID",
-                    });
-                }
-
-                // Find booking
                 const booking = await bookingsCollection.findOne({
-                    _id,
+                    _id: new ObjectId(id),
                 });
 
                 if (!booking) {
@@ -557,26 +518,16 @@ async function run() {
                     });
                 }
 
-                // User validation
-                if (booking.userId !== userId) {
+                if (booking.userId !== req.user.id) {
                     return res.status(403).json({
                         success: false,
-                        message: "You can only cancel your own booking",
+                        message: "Unauthorized booking cancel",
                     });
                 }
 
-                // Already cancelled
-                if (booking.status === "cancelled") {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Booking already cancelled",
-                    });
-                }
-
-                // Update booking status
                 await bookingsCollection.updateOne(
                     {
-                        _id,
+                        _id: booking._id,
                     },
                     {
                         $set: {
@@ -587,18 +538,16 @@ async function run() {
                 );
 
                 // Decrement booking count
-                if (booking.carId) {
-                    await carsCollection.updateOne(
-                        {
-                            _id: booking.carId,
+                await carsCollection.updateOne(
+                    {
+                        _id: booking.carId,
+                    },
+                    {
+                        $inc: {
+                            bookingCount: -1,
                         },
-                        {
-                            $inc: {
-                                bookingCount: -1,
-                            },
-                        }
-                    );
-                }
+                    }
+                );
 
                 res.status(200).json({
                     success: true,
@@ -606,6 +555,7 @@ async function run() {
                 });
 
             } catch (error) {
+
                 console.error("DELETE /bookings/:id error:", error);
 
                 res.status(500).json({
@@ -615,106 +565,28 @@ async function run() {
             }
         });
 
-        //login a user
-        app.post("/login", async (req, res) => {
-            try {
+        // TEST DATABASE CONNECTION
 
-                const { email, password } = req.body;
-
-                // Validation
-                if (!email || !password) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Email and password are required",
-                    });
-                }
-
-                // Find user
-                const user = await usersCollection.findOne({
-                    email: email.toLowerCase(),
-                });
-
-                // User check
-                if (!user || !user.passwordHash) {
-                    return res.status(401).json({
-                        success: false,
-                        message: "Invalid email or password",
-                    });
-                }
-
-                // Password compare
-                const isPasswordValid = await bcrypt.compare(
-                    password,
-                    user.passwordHash
-                );
-
-                if (!isPasswordValid) {
-                    return res.status(401).json({
-                        success: false,
-                        message: "Invalid email or password",
-                    });
-                }
-
-                // JWT token create
-                const token = jwt.sign(
-                    {
-                        uid: user._id.toString(),
-                        email: user.email,
-                        name: user.name,
-                    },
-                    process.env.JWT_SECRET,
-                    {
-                        expiresIn: "7d",
-                    }
-                );
-
-                // Cookie set
-                res.cookie("token", token, {
-                    httpOnly: true,
-                    secure: process.env.NODE_ENV === "production",
-                    sameSite: "strict",
-                    maxAge: 7 * 24 * 60 * 60 * 1000,
-                });
-
-                // Response
-                res.status(200).json({
-                    success: true,
-                    message: "Login successful",
-
-                    token,
-
-                    user: {
-                        uid: user._id.toString(),
-                        email: user.email,
-                        name: user.name,
-                    },
-                });
-
-            } catch (error) {
-                console.error("POST /auth/login error:", error);
-
-                res.status(500).json({
-                    success: false,
-                    message: "Could not log in",
-                });
-            }
+        await client.db("admin").command({
+            ping: 1,
         });
 
-
-        // Test the connection
-        await client.db("admin").command({ ping: 1 });
-
     } finally {
+
         // await client.close();
+
     }
 }
 
 run().catch(console.dir);
 
-// Root route
+// ROOT ROUTE
+
 app.get("/", (req, res) => {
     res.send("DriveFleet Server Running...");
 });
+
+// START SERVER
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
