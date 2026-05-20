@@ -4,3 +4,4 @@ dist/
 build/
 .next/
 .DS_Store
+.vercel
