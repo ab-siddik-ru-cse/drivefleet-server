@@ -4,9 +4,6 @@ let client = null;
 let connectPromise = null;
 let connected = false;
 
-/**
- * Lazy: don't read MONGODB_URI until someone actually tries to connect.
- */
 export async function connect() {
   if (connected && client) return client;
   if (connectPromise) return connectPromise;

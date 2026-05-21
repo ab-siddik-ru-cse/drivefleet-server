@@ -10,10 +10,6 @@ export function buildAuth() {
 
   const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
   const baseURL = process.env.BETTER_AUTH_URL || "http://localhost:5000";
-
-  // Trust both the client URL and our own URL. The Next.js proxy forwards
-  // the original Origin header from the browser, so we need the client URL
-  // in trustedOrigins.
   const trustedOrigins = [clientUrl, baseURL].filter(Boolean);
 
   return betterAuth({
@@ -56,18 +52,15 @@ export function buildAuth() {
     },
 
     advanced: {
-      // Cookies travel through Next.js proxy and end up on the CLIENT'S
-      // domain (first-party). So sameSite=lax + secure is the standard
-      // safe choice — no need for sameSite=none anymore.
+      // Cross-origin deployment: client and server on different domains.
+      // Browser requires sameSite=none + secure for cookies to be sent
+      // between them. (Without these, Set-Cookie is silently dropped.)
       useSecureCookies: isProd,
       defaultCookieAttributes: {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: isProd ? "none" : "lax",
         secure: isProd,
         path: "/",
-        // IMPORTANT: don't set `domain` — let the browser scope the cookie
-        // to whatever host it sees the response coming from (the client
-        // domain, thanks to the proxy).
       },
     },
   });
