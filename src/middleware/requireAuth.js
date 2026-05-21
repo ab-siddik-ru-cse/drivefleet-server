@@ -1,10 +1,5 @@
 import { COOKIE_NAME, verifyToken } from "../lib/jwt.js";
 
-/**
- * Token lookup order:
- *   1. Authorization: Bearer <token>  — primary, works always cross-origin
- *   2. Cookie (df_token)              — fallback, works locally & same-origin
- */
 function getTokenFromRequest(req) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (authHeader && typeof authHeader === "string") {

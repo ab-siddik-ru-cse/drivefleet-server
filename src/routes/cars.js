@@ -9,9 +9,6 @@ function toObjectId(id) {
   try { return new ObjectId(id); } catch { return null; }
 }
 
-/**
- * GET /api/cars — public listing with search ($regex), filter ($in), sort
- */
 router.get("/", attachUser, async (req, res) => {
   try {
     const { q, sort = "newest", limit, owner } = req.query;

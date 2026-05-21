@@ -26,7 +26,6 @@ app.use(
 
 app.use(cookieParser());
 
-// Request logging — helps diagnose cookie/cors issues from Vercel logs.
 app.use((req, _res, next) => {
   if (req.path.startsWith("/api/")) {
     console.log(
@@ -40,7 +39,6 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Lazy init shared across requests in the same Vercel function instance.
 let authInstance = null;
 let initPromise = null;
 
@@ -56,7 +54,6 @@ async function ensureInit() {
   return initPromise;
 }
 
-// === Better Auth handler — MUST be before express.json() ===
 app.all("/api/auth/*", async (req, res) => {
   try {
     const auth = await ensureInit();
@@ -69,7 +66,6 @@ app.all("/api/auth/*", async (req, res) => {
 
 app.use(express.json({ limit: "1mb" }));
 
-// === Our routes ===
 let sessionRouter = null;
 app.use("/api/session", async (req, res, next) => {
   try {
@@ -87,7 +83,6 @@ app.use("/api/cars", carsRoutes);
 app.use("/api/bookings", bookingsRoutes);
 app.use("/api/users", usersRoutes);
 
-// Health check + env diagnostic
 app.get("/", (_req, res) => {
   const required = [
     "MONGODB_URI",
@@ -133,14 +128,12 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// === Local dev server ===
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`🚗 DriveFleet server listening on http://localhost:${PORT}`);
-    console.log(`   CORS origin: ${CLIENT_URL}`);
+    console.log(`DriveFleet server listening on http://localhost:${PORT}`);
+    console.log(`CORS origin: ${CLIENT_URL}`);
   });
 }
 
-// === Vercel serverless export ===
 export default app;

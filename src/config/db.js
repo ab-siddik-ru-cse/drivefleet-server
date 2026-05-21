@@ -11,7 +11,7 @@ export async function connect() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
     throw new Error(
-      "MONGODB_URI is not set. On Vercel: Project Settings → Environment Variables → add MONGODB_URI to Production."
+      "MONGODB_URI is not set."
     );
   }
 
@@ -19,7 +19,7 @@ export async function connect() {
     client = new MongoClient(uri);
     await client.connect();
     connected = true;
-    console.log("✅ MongoDB connected");
+    console.log("MongoDB connected");
     return client;
   })();
 

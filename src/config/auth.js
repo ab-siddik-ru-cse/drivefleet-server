@@ -52,9 +52,6 @@ export function buildAuth() {
     },
 
     advanced: {
-      // Cross-origin deployment: client and server on different domains.
-      // Browser requires sameSite=none + secure for cookies to be sent
-      // between them. (Without these, Set-Cookie is silently dropped.)
       useSecureCookies: isProd,
       defaultCookieAttributes: {
         httpOnly: true,
