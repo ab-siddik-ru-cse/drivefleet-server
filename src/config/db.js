@@ -1,4 +1,4 @@
-const { MongoClient } = require("mongodb");
+import { MongoClient } from "mongodb";
 
 let client = null;
 let connectPromise = null;
@@ -6,10 +6,8 @@ let connected = false;
 
 /**
  * Lazy: don't read MONGODB_URI until someone actually tries to connect.
- * This way the server can boot and serve a /health endpoint that tells
- * us what env vars are missing, instead of crashing immediately on import.
  */
-async function connect() {
+export async function connect() {
   if (connected && client) return client;
   if (connectPromise) return connectPromise;
 
@@ -24,24 +22,21 @@ async function connect() {
     client = new MongoClient(uri);
     await client.connect();
     connected = true;
-    console.log("MongoDB connected");
+    console.log("✅ MongoDB connected");
     return client;
   })();
 
   try {
     return await connectPromise;
   } catch (err) {
-    // Reset so next call retries (helpful for transient errors on cold start).
     connectPromise = null;
     throw err;
   }
 }
 
-function getDb() {
+export function getDb() {
   if (!connected || !client) {
     throw new Error("Database not connected yet. Call connect() first.");
   }
   return client.db("drivefleet");
 }
-
-module.exports = { connect, getDb };

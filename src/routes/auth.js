@@ -1,10 +1,16 @@
-const express = require("express");
-const { signToken, setAuthCookie, clearAuthCookie } = require("../lib/jwt");
+import express from "express";
+import { signToken, setAuthCookie, clearAuthCookie } from "../lib/jwt.js";
 
-function authRoutes(auth) {
+export default function authRoutes(auth) {
   const router = express.Router();
 
-  // POST /api/session/issue-jwt
+  /**
+   * POST /api/session/issue-jwt
+   *
+   * After Better Auth sign-in, client calls this to get our JWT cookie set.
+   * Since the proxy keeps everything same-origin, the HttpOnly cookie just
+   * works — no token in response body needed.
+   */
   router.post("/issue-jwt", async (req, res) => {
     try {
       const session = await auth.api.getSession({ headers: req.headers });
@@ -34,7 +40,10 @@ function authRoutes(auth) {
     }
   });
 
-  // GET /api/session/me
+  /**
+   * GET /api/session/me
+   * Returns current user via Better Auth session.
+   */
   router.get("/me", async (req, res) => {
     try {
       const session = await auth.api.getSession({ headers: req.headers });
@@ -53,7 +62,6 @@ function authRoutes(auth) {
     }
   });
 
-  // POST /api/session/logout
   router.post("/logout", async (req, res) => {
     try {
       await auth.api.signOut({ headers: req.headers });
@@ -66,5 +74,3 @@ function authRoutes(auth) {
 
   return router;
 }
-
-module.exports = authRoutes;

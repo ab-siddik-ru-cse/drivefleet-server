@@ -1,14 +1,12 @@
-const express = require("express");
-const { ObjectId } = require("mongodb");
-const { getDb } = require("../config/db");
-const { requireAuth } = require("../middleware/requireAuth");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDb } from "../config/db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
 const DRIVER_DAILY_FEE = 10;
 
-
- // GET /api/bookings — current user's bookings.
 router.get("/", requireAuth, async (req, res) => {
   try {
     const docs = await getDb()
@@ -28,9 +26,6 @@ router.get("/", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Could not load bookings." });
   }
 });
-
-
- // POST /api/bookings — create a booking and $inc the car's bookingCount.
 
 router.post("/", requireAuth, async (req, res) => {
   try {
@@ -103,6 +98,7 @@ router.post("/", requireAuth, async (req, res) => {
 
     const result = await db.collection("bookings").insertOne(bookingDoc);
 
+    // $inc booking count
     await db.collection("cars").updateOne(
       { _id: _carId },
       { $inc: { bookingCount: 1 } }
@@ -122,8 +118,6 @@ router.post("/", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Could not create booking." });
   }
 });
-
- // DELETE /api/bookings/:id — cancel a booking; $inc -1 on the car.
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
@@ -163,4 +157,4 @@ router.delete("/:id", requireAuth, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

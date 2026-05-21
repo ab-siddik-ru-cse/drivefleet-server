@@ -1,29 +1,32 @@
-const { COOKIE_NAME, verifyToken } = require("../lib/jwt");
+import { COOKIE_NAME, verifyToken } from "../lib/jwt.js";
 
-function requireAuth(req, res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
+/**
+ * Token lookup order:
+ *   1. Cookie (df_token) — primary, works because Next.js proxy keeps everything same-origin
+ *   2. Authorization Bearer header — fallback for API clients / future mobile app
+ */
+function getTokenFromRequest(req) {
+  // Primary: HttpOnly cookie
+  if (req.cookies?.[COOKIE_NAME]) return req.cookies[COOKIE_NAME];
+
+  // Fallback: Authorization header (for non-browser clients)
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (authHeader && typeof authHeader === "string") {
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+export function requireAuth(req, res, next) {
+  const token = getTokenFromRequest(req);
 
   if (!token) {
-    console.warn(
-      "[requireAuth] no token. path=%s cookies=%j cookieHeader=%j origin=%s",
-      req.path,
-      Object.keys(req.cookies || {}),
-      req.headers.cookie ? "(present)" : "(missing)",
-      req.headers.origin
-    );
-    return res.status(401).json({
-      error: "Not authenticated.",
-      debug: {
-        cookiesSeen: Object.keys(req.cookies || {}),
-        cookieHeaderPresent: !!req.headers.cookie,
-        origin: req.headers.origin || null,
-      },
-    });
+    return res.status(401).json({ error: "Not authenticated." });
   }
 
   const decoded = verifyToken(token);
   if (!decoded) {
-    console.warn("[requireAuth] token verify failed. path=%s", req.path);
     return res.status(401).json({ error: "Session expired or invalid. Please log in again." });
   }
 
@@ -35,8 +38,8 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function attachUser(req, _res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
+export function attachUser(req, _res, next) {
+  const token = getTokenFromRequest(req);
   if (!token) return next();
   const decoded = verifyToken(token);
   if (decoded) {
@@ -44,5 +47,3 @@ function attachUser(req, _res, next) {
   }
   next();
 }
-
-module.exports = { requireAuth, attachUser };

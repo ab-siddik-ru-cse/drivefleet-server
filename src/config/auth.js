@@ -1,15 +1,19 @@
-const { betterAuth } = require("better-auth");
-const { mongodbAdapter } = require("better-auth/adapters/mongodb");
-const { getDb } = require("./db");
+import { betterAuth } from "better-auth";
+import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import { getDb } from "./db.js";
 
-function buildAuth() {
+export function buildAuth() {
   const db = getDb();
 
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd =
+    process.env.NODE_ENV === "production" || !!process.env.VERCEL;
+
   const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
   const baseURL = process.env.BETTER_AUTH_URL || "http://localhost:5000";
 
-  // Trusted origins for client/server requests
+  // Trust both the client URL and our own URL. The Next.js proxy forwards
+  // the original Origin header from the browser, so we need the client URL
+  // in trustedOrigins.
   const trustedOrigins = [clientUrl, baseURL].filter(Boolean);
 
   return betterAuth({
@@ -23,24 +27,16 @@ function buildAuth() {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 6,
-
-      // Password validation rules
       password: {
         validate: async (password) => {
           if (password.length < 6) {
             throw new Error("Password must be at least 6 characters long.");
           }
-
           if (!/[A-Z]/.test(password)) {
-            throw new Error(
-              "Password must contain at least one uppercase letter."
-            );
+            throw new Error("Password must contain at least one uppercase letter.");
           }
-
           if (!/[a-z]/.test(password)) {
-            throw new Error(
-              "Password must contain at least one lowercase letter."
-            );
+            throw new Error("Password must contain at least one lowercase letter.");
           }
         },
       },
@@ -59,15 +55,20 @@ function buildAuth() {
       updateAge: 60 * 60 * 24,
     },
 
-    // Cross-origin cookie configuration
     advanced: {
+      // Cookies travel through Next.js proxy and end up on the CLIENT'S
+      // domain (first-party). So sameSite=lax + secure is the standard
+      // safe choice — no need for sameSite=none anymore.
+      useSecureCookies: isProd,
       defaultCookieAttributes: {
         httpOnly: true,
-        sameSite: isProd ? "none" : "lax",
+        sameSite: "lax",
         secure: isProd,
+        path: "/",
+        // IMPORTANT: don't set `domain` — let the browser scope the cookie
+        // to whatever host it sees the response coming from (the client
+        // domain, thanks to the proxy).
       },
     },
   });
 }
-
-module.exports = { buildAuth };

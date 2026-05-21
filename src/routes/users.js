@@ -1,31 +1,25 @@
-const express = require("express");
-const { ObjectId } = require("mongodb");
-const { getDb } = require("../config/db");
-const { requireAuth } = require("../middleware/requireAuth");
-const { signToken, setAuthCookie } = require("../lib/jwt");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDb } from "../config/db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { signToken, setAuthCookie } from "../lib/jwt.js";
 
 const router = express.Router();
 
 async function findBetterAuthUser(db, uid) {
   const collections = ["user", "users"];
-
   for (const collName of collections) {
     const coll = db.collection(collName);
-
     let doc = await coll.findOne({ id: uid });
     if (doc) return { doc, coll };
-
     try {
       const oid = new ObjectId(uid);
       doc = await coll.findOne({ _id: oid });
       if (doc) return { doc, coll };
-    } catch {
-    }
-
+    } catch {}
     doc = await coll.findOne({ _id: uid });
     if (doc) return { doc, coll };
   }
-
   return { doc: null, coll: null };
 }
 
@@ -47,7 +41,6 @@ router.get("/_debug", requireAuth, async (req, res) => {
       summary[c.name] = await db.collection(c.name).countDocuments();
     }
 
-    // Try every lookup style for the current uid
     const uid = req.user.uid;
     const attempts = {};
     for (const collName of ["user", "users"]) {
@@ -73,7 +66,6 @@ router.get("/_debug", requireAuth, async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
-
 
 router.get("/me", requireAuth, async (req, res) => {
   try {
@@ -101,7 +93,7 @@ router.get("/me", requireAuth, async (req, res) => {
         name: user.name || "",
         email: user.email,
         image: user.image || null,
-        provider, // "google" | "credential"
+        provider,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
@@ -156,10 +148,8 @@ router.patch("/me", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found." });
     }
 
-    // Update using the same filter that found the doc — by _id is safest.
     await coll.updateOne({ _id: existing._id }, { $set });
 
-    // Keep denormalized ownerName on cars in sync.
     if ($set.name) {
       await db.collection("cars").updateMany(
         { ownerId: req.user.uid },
@@ -169,7 +159,6 @@ router.patch("/me", requireAuth, async (req, res) => {
 
     const updated = await coll.findOne({ _id: existing._id });
 
-    // Re-issue JWT cookie with new name so navbar reflects it instantly.
     const token = signToken({
       uid: updated.id || updated._id?.toString?.() || req.user.uid,
       email: updated.email,
@@ -193,4 +182,4 @@ router.patch("/me", requireAuth, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

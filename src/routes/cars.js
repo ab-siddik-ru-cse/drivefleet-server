@@ -1,7 +1,7 @@
-const express = require("express");
-const { ObjectId } = require("mongodb");
-const { getDb } = require("../config/db");
-const { requireAuth, attachUser } = require("../middleware/requireAuth");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDb } from "../config/db.js";
+import { requireAuth, attachUser } from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
@@ -9,27 +9,24 @@ function toObjectId(id) {
   try { return new ObjectId(id); } catch { return null; }
 }
 
+/**
+ * GET /api/cars — public listing with search ($regex), filter ($in), sort
+ */
 router.get("/", attachUser, async (req, res) => {
   try {
     const { q, sort = "newest", limit, owner } = req.query;
-
     const typesRaw = req.query.type;
     const types = Array.isArray(typesRaw) ? typesRaw : typesRaw ? [typesRaw] : [];
 
     const filter = {};
-
     if (typeof q === "string" && q.trim()) {
       filter.name = { $regex: q.trim(), $options: "i" };
     }
-
     if (types.length > 0) {
       filter.type = { $in: types };
     }
-
     if (owner === "me") {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       filter.ownerId = req.user.uid;
     }
 
@@ -55,8 +52,6 @@ router.get("/", attachUser, async (req, res) => {
   }
 });
 
-
-//GET /api/cars/:id — public single-car details.
 router.get("/:id", async (req, res) => {
   try {
     const _id = toObjectId(req.params.id);
@@ -72,7 +67,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/cars — create a car (auth required).
 router.post("/", requireAuth, async (req, res) => {
   try {
     const {
@@ -128,9 +122,6 @@ router.post("/", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Could not create car." });
   }
 });
-
-
-// PATCH /api/cars/:id — owner only.
 
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
@@ -194,9 +185,6 @@ router.patch("/:id", requireAuth, async (req, res) => {
   }
 });
 
-
-// DELETE /api/cars/:id — owner only.
-
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const _id = toObjectId(req.params.id);
@@ -216,4 +204,4 @@ router.delete("/:id", requireAuth, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
