@@ -15,8 +15,6 @@ const usersRoutes = require("./routes/users");
 const app = express();
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
-app.set("trust proxy", true);
-
 app.use(
   cors({
     origin: CLIENT_URL,
@@ -25,6 +23,20 @@ app.use(
 );
 
 app.use(cookieParser());
+
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/")) {
+    console.log(
+      "[req] %s %s origin=%s cookies=[%s]",
+      req.method,
+      req.path,
+      req.headers.origin || "-",
+      Object.keys(req.cookies || {}).join(",") || "(none)"
+    );
+  }
+  next();
+});
+
 
 let authInstance = null;
 let initPromise = null;
@@ -53,6 +65,7 @@ app.all("/api/auth/*", async (req, res) => {
 
 // Now safe to enable JSON parsing for our own routes
 app.use(express.json({ limit: "1mb" }));
+
 
 let sessionRouter = null;
 app.use("/api/session", async (req, res, next) => {
@@ -95,9 +108,9 @@ app.use((err, _req, res, _next) => {
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`DriveFleet server listening on http://localhost:${PORT}`);
-    console.log(`CORS origin: ${CLIENT_URL}`);
-    console.log(`Better Auth base: ${process.env.BETTER_AUTH_URL || "http://localhost:" + PORT}`);
+    console.log(`🚗 DriveFleet server listening on http://localhost:${PORT}`);
+    console.log(`   CORS origin: ${CLIENT_URL}`);
+    console.log(`   Better Auth base: ${process.env.BETTER_AUTH_URL || "http://localhost:" + PORT}`);
   });
 }
 
