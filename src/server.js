@@ -16,64 +16,82 @@ const app = express();
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
 app.set("trust proxy", true);
+const allowedOrigins = CLIENT_URL.split(",").map((o) => o.trim()).filter(Boolean);
 
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS: ${origin} not allowed`));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 app.use(cookieParser());
 
+const g = globalThis;
+
+async function ensureInit() {
+  if (g._authInstance) return g._authInstance;
+  if (g._initPromise) return g._initPromise;
+
+  g._initPromise = (async () => {
+    await connect();
+    g._authInstance = buildAuth();
+    return g._authInstance;
+  })().catch((err) => {
+    g._initPromise = null;
+    throw err;
+  });
+
+  return g._initPromise;
+}
+
 app.use((req, _res, next) => {
   if (req.path.startsWith("/api/")) {
     console.log(
-      "[req] %s %s origin=%s cookies=[%s]",
+      "[req] %s %s origin=%s",
       req.method,
       req.path,
-      req.headers.origin || "-",
-      Object.keys(req.cookies || {}).join(",") || "(none)"
+      req.headers.origin || "-"
     );
   }
   next();
 });
 
-let authInstance = null;
-let initPromise = null;
-
-async function ensureInit() {
-  if (authInstance) return authInstance;
-  if (!initPromise) {
-    initPromise = (async () => {
-      await connect();
-      authInstance = buildAuth();
-      return authInstance;
-    })();
+app.use("/api", async (req, res, next) => {
+  try {
+    await ensureInit();
+    next();
+  } catch (err) {
+    console.error("[init] DB/Auth init failed:", err.message);
+    res.status(503).json({
+      error: "Service temporarily unavailable. Please retry in a moment.",
+      detail: process.env.NODE_ENV !== "production" ? err.message : undefined,
+    });
   }
-  return initPromise;
-}
+});
 
 app.all("/api/auth/*", async (req, res) => {
   try {
     const auth = await ensureInit();
     return toNodeHandler(auth)(req, res);
   } catch (err) {
-    console.error("[better-auth handler] init error:", err);
+    console.error("[better-auth handler] error:", err);
     return res.status(500).json({ error: "Auth service unavailable.", detail: err.message });
   }
 });
 
 app.use(express.json({ limit: "1mb" }));
 
-let sessionRouter = null;
 app.use("/api/session", async (req, res, next) => {
   try {
-    if (!sessionRouter) {
-      const auth = await ensureInit();
-      sessionRouter = authRoutes(auth);
-    }
-    return sessionRouter(req, res, next);
+    const auth = await ensureInit();
+    if (!g._sessionRouter) g._sessionRouter = authRoutes(auth);
+    return g._sessionRouter(req, res, next);
   } catch (err) {
     next(err);
   }
@@ -110,9 +128,6 @@ app.get("/", (_req, res) => {
     clientUrl: process.env.CLIENT_URL || "(unset)",
     envStatus,
     missing: missing.length ? missing : undefined,
-    hint: missing.length
-      ? "Add the missing env vars on Vercel Dashboard. Make sure to check the 'Production' checkbox. Redeploy after adding."
-      : "All required env vars are set.",
   });
 });
 

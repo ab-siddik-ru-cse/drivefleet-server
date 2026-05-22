@@ -1,39 +1,51 @@
 import { MongoClient } from "mongodb";
 
-let client = null;
-let connectPromise = null;
-let connected = false;
+const g = globalThis;
 
 export async function connect() {
-  if (connected && client) return client;
-  if (connectPromise) return connectPromise;
+  if (g._mongoClient && g._mongoConnected) {
+    try {
+      await g._mongoClient.db("admin").command({ ping: 1 });
+      return g._mongoClient;
+    } catch {
+      g._mongoClient = null;
+      g._mongoConnected = false;
+      g._mongoConnectPromise = null;
+    }
+  }
+
+  if (g._mongoConnectPromise) return g._mongoConnectPromise;
 
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    throw new Error(
-      "MONGODB_URI is not set."
-    );
+    throw new Error("MONGODB_URI is not set.");
   }
 
-  connectPromise = (async () => {
-    client = new MongoClient(uri);
+  g._mongoConnectPromise = (async () => {
+    const client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 8000,   
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 30000,
+      maxPoolSize: 5,                  
+      minPoolSize: 1,
+    });
     await client.connect();
-    connected = true;
+    g._mongoClient = client;
+    g._mongoConnected = true;
     console.log("MongoDB connected");
     return client;
-  })();
-
-  try {
-    return await connectPromise;
-  } catch (err) {
-    connectPromise = null;
+  })().catch((err) => {
+    g._mongoConnectPromise = null;
+    g._mongoConnected = false;
     throw err;
-  }
+  });
+
+  return g._mongoConnectPromise;
 }
 
 export function getDb() {
-  if (!connected || !client) {
+  if (!g._mongoConnected || !g._mongoClient) {
     throw new Error("Database not connected yet. Call connect() first.");
   }
-  return client.db("drivefleet");
+  return g._mongoClient.db("drivefleet");
 }
